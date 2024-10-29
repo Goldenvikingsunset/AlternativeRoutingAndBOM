@@ -100,6 +100,17 @@ table 50101 "Alternative Routing"
             Caption = 'Status';
             InitValue = New;
         }
+        field(10; "Work Center Filter"; Code[20])
+        {
+            Caption = 'Work Center Filter';
+            TableRelation = "Work Center";
+
+            trigger OnValidate()
+            begin
+                if "Work Center Filter" <> '' then
+                    ValidateWorkCenter();
+            end;
+        }
     }
 
     keys
@@ -112,6 +123,9 @@ table 50101 "Alternative Routing"
         {
         }
         key(Key3; "Routing No.")
+        {
+        }
+        key(Key4; "Work Center Filter")
         {
         }
     }
@@ -127,6 +141,10 @@ table 50101 "Alternative Routing"
         MinGreaterThanMaxErr: Label 'Minimum Order Size cannot be greater than Maximum Order Size.';
         DateRangeErr: Label 'Starting Date must be before Ending Date.';
         DuplicateErr: Label 'An alternative routing with overlapping dates already exists for this item, variant, and location.';
+        WorkCenterNotInRoutingErr: Label 'The selected Work Center must be used in the Routing operations.';
+        RoutingNotExistErr: Label 'Routing %1 does not exist.';
+        RoutingNotCertifiedErr: Label 'Routing %1 must be certified.';
+        StandardRoutingErr: Label 'This is already the standard Routing for the item.';
 
     trigger OnInsert()
     begin
@@ -141,14 +159,14 @@ table 50101 "Alternative Routing"
         Item: Record Item;
     begin
         if not RoutingHeader.Get("Routing No.") then
-            Error('Routing %1 does not exist.', "Routing No.");
+            Error(RoutingNotExistErr, "Routing No.");
 
         if RoutingHeader.Status <> RoutingHeader.Status::Certified then
-            Error('Routing %1 must be certified.', "Routing No.");
+            Error(RoutingNotCertifiedErr, "Routing No.");
 
         if Item.Get("Item No.") then
             if Item."Routing No." = "Routing No." then
-                Error('This is already the standard Routing for the item.');
+                Error(StandardRoutingErr);
     end;
 
     local procedure ValidateDateRange()
@@ -169,5 +187,18 @@ table 50101 "Alternative Routing"
         AltRouting.SetFilter("Ending Date", '>=%1', "Starting Date");
         if not AltRouting.IsEmpty then
             Error(DuplicateErr);
+    end;
+
+    local procedure ValidateWorkCenter()
+    var
+        RoutingLine: Record "Routing Line";
+    begin
+        if "Routing No." = '' then
+            exit;
+
+        RoutingLine.SetRange("Routing No.", "Routing No.");
+        RoutingLine.SetRange("Work Center No.", "Work Center Filter");
+        if RoutingLine.IsEmpty then
+            Error(WorkCenterNotInRoutingErr);
     end;
 }
