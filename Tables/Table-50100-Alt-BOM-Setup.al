@@ -2,8 +2,6 @@ table 50100 "Alternative Prod. BOM"
 {
     Caption = 'Alternative Production BOM';
     DataClassification = CustomerContent;
-    //LookupPageId = "Alternative Prod. BOM List";
-    //DrillDownPageId = "Alternative Prod. BOM List";
 
     fields
     {
@@ -14,160 +12,160 @@ table 50100 "Alternative Prod. BOM"
             NotBlank = true;
 
             trigger OnValidate()
+            var
+                Item: Record Item;
             begin
-                if "Item No." <> xRec."Item No." then begin
-                    "Production BOM No." := '';
-                    "Variant Code" := '';
-                end;
+                if Item.Get("Item No.") then begin
+                    if Item."Manufacturing Policy" <> Item."Manufacturing Policy"::"Make-to-Stock" then
+                        Error(ItemMustBeMTSErr, "Item No.");
+                end else
+                    Error(ItemNotFoundErr, "Item No.");
             end;
         }
+
         field(2; "Variant Code"; Code[10])
         {
             Caption = 'Variant Code';
             TableRelation = "Item Variant".Code WHERE("Item No." = FIELD("Item No."));
 
             trigger OnValidate()
+            var
+                ItemVariant: Record "Item Variant";
             begin
-                TestField("Item No.");
+                if "Variant Code" <> '' then
+                    if not ItemVariant.Get("Item No.", "Variant Code") then
+                        Error(VariantNotFoundErr, "Variant Code", "Item No.");
             end;
         }
+
         field(3; "Location Code"; Code[10])
         {
             Caption = 'Location Code';
             TableRelation = Location;
 
             trigger OnValidate()
+            var
+                Location: Record Location;
             begin
-                TestField("Item No.");
+                if "Location Code" <> '' then
+                    if not Location.Get("Location Code") then
+                        Error(LocationNotFoundErr, "Location Code");
             end;
         }
+
         field(4; "Min Order Size"; Decimal)
         {
             Caption = 'Minimum Order Size';
-            DecimalPlaces = 0 : 5;
             MinValue = 0;
+            DecimalPlaces = 0 : 5;
 
             trigger OnValidate()
             begin
-                if "Min Order Size" > "Max Order Size" then
-                    Error(MinGreaterThanMaxErr);
+                if ("Min Order Size" < 0) then
+                    Error(MinOrderSizeErr);
+
+                if ("Max Order Size" <> 0) and ("Min Order Size" > "Max Order Size") then
+                    Error(OrderSizeRangeErr);
             end;
         }
+
         field(5; "Max Order Size"; Decimal)
         {
             Caption = 'Maximum Order Size';
-            DecimalPlaces = 0 : 5;
             MinValue = 0;
+            DecimalPlaces = 0 : 5;
 
             trigger OnValidate()
             begin
-                if "Min Order Size" > "Max Order Size" then
-                    Error(MinGreaterThanMaxErr);
+                if ("Max Order Size" < 0) then
+                    Error(MaxOrderSizeErr);
+
+                if ("Max Order Size" <> 0) and ("Min Order Size" > "Max Order Size") then
+                    Error(OrderSizeRangeErr);
             end;
         }
+
         field(6; "Production BOM No."; Code[20])
         {
             Caption = 'Production BOM No.';
-            TableRelation = "Production BOM Header"."No." WHERE(Status = CONST(Certified));
+            TableRelation = "Production BOM Header";
 
             trigger OnValidate()
+            var
+                ProdBOMHeader: Record "Production BOM Header";
             begin
-                TestField("Item No.");
                 if "Production BOM No." <> '' then
-                    ValidateProductionBOM();
+                    if not ProdBOMHeader.Get("Production BOM No.") then
+                        Error(ProdBOMNotFoundErr, "Production BOM No.");
             end;
-        }
-        field(7; "Starting Date"; Date)
-        {
-            Caption = 'Starting Date';
-
-            trigger OnValidate()
-            begin
-                ValidateDateRange();
-            end;
-        }
-        field(8; "Ending Date"; Date)
-        {
-            Caption = 'Ending Date';
-
-            trigger OnValidate()
-            begin
-                ValidateDateRange();
-            end;
-        }
-        field(9; Status; Enum "Alternative Status")
-        {
-            Caption = 'Status';
-            InitValue = New;
         }
     }
 
     keys
     {
-        key(PK; "Item No.", "Variant Code", "Location Code", "Starting Date")
+        key(PK; "Item No.", "Variant Code", "Location Code", "Min Order Size")
         {
             Clustered = true;
         }
-        key(Key2; "Item No.", "Production BOM No.")
-        {
-        }
-        key(Key3; "Production BOM No.")
-        {
-        }
     }
-
-    fieldgroups
-    {
-        fieldgroup(DropDown; "Item No.", "Variant Code", "Location Code", "Production BOM No.")
-        {
-        }
-    }
-
-    var
-        MinGreaterThanMaxErr: Label 'Minimum Order Size cannot be greater than Maximum Order Size.';
-        DateRangeErr: Label 'Starting Date must be before Ending Date.';
-        DuplicateErr: Label 'An alternative BOM with overlapping dates already exists for this item, variant, and location.';
 
     trigger OnInsert()
     begin
-        TestField("Item No.");
-        TestField("Production BOM No.");
-        ValidateDuplicates();
+        ValidateData();
     end;
 
-    local procedure ValidateProductionBOM()
+    trigger OnModify()
+    begin
+        ValidateData();
+    end;
+
     var
-        ProdBOMHeader: Record "Production BOM Header";
+        ItemMustBeMTSErr: Label 'Item %1 must be Make-to-Stock';
+        ItemNotFoundErr: Label 'Item %1 does not exist';
+        VariantNotFoundErr: Label 'Variant %1 does not exist for item %2';
+        LocationNotFoundErr: Label 'Location %1 does not exist';
+        ProdBOMNotFoundErr: Label 'Production BOM %1 does not exist';
+        MinOrderSizeErr: Label 'Minimum Order Size cannot be negative';
+        MaxOrderSizeErr: Label 'Maximum Order Size cannot be negative';
+        OrderSizeRangeErr: Label 'Minimum Order Size must be less than Maximum Order Size';
+
+    local procedure ValidateData()
+    var
         Item: Record Item;
+        ItemVariant: Record "Item Variant";
+        Location: Record Location;
+        ProdBOMHeader: Record "Production BOM Header";
     begin
-        if not ProdBOMHeader.Get("Production BOM No.") then
-            Error('Production BOM %1 does not exist.', "Production BOM No.");
+        // Validate Item
+        if not Item.Get("Item No.") then
+            Error(ItemNotFoundErr, "Item No.");
 
-        if ProdBOMHeader.Status <> ProdBOMHeader.Status::Certified then
-            Error('Production BOM %1 must be certified.', "Production BOM No.");
+        if Item."Manufacturing Policy" <> Item."Manufacturing Policy"::"Make-to-Stock" then
+            Error(ItemMustBeMTSErr, "Item No.");
 
-        if Item.Get("Item No.") then
-            if Item."Production BOM No." = "Production BOM No." then
-                Error('This is already the standard Production BOM for the item.');
-    end;
+        // Validate Variant if specified
+        if "Variant Code" <> '' then
+            if not ItemVariant.Get("Item No.", "Variant Code") then
+                Error(VariantNotFoundErr, "Variant Code", "Item No.");
 
-    local procedure ValidateDateRange()
-    begin
-        if ("Starting Date" <> 0D) and ("Ending Date" <> 0D) then
-            if "Starting Date" > "Ending Date" then
-                Error(DateRangeErr);
-    end;
+        // Validate Location if specified
+        if "Location Code" <> '' then
+            if not Location.Get("Location Code") then
+                Error(LocationNotFoundErr, "Location Code");
 
-    local procedure ValidateDuplicates()
-    var
-        AltProdBOM: Record "Alternative Prod. BOM";
-    begin
-        AltProdBOM.SetRange("Item No.", "Item No.");
-        AltProdBOM.SetRange("Variant Code", "Variant Code");
-        AltProdBOM.SetRange("Location Code", "Location Code");
-        AltProdBOM.SetFilter("Starting Date", '<=%1', "Ending Date");
-        AltProdBOM.SetFilter("Ending Date", '>=%1', "Starting Date");
-        if not AltProdBOM.IsEmpty then
-            Error(DuplicateErr);
+        // Validate Production BOM
+        if "Production BOM No." <> '' then
+            if not ProdBOMHeader.Get("Production BOM No.") then
+                Error(ProdBOMNotFoundErr, "Production BOM No.");
+
+        // Validate Order Sizes
+        if ("Min Order Size" < 0) then
+            Error(MinOrderSizeErr);
+
+        if ("Max Order Size" < 0) then
+            Error(MaxOrderSizeErr);
+
+        if ("Max Order Size" <> 0) and ("Min Order Size" > "Max Order Size") then
+            Error(OrderSizeRangeErr);
     end;
 }

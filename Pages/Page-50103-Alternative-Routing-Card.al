@@ -1,35 +1,46 @@
-page 50101 "Alternative Routing List"
+page 50103 "Alternative Routing Card"
 {
-    PageType = List;
+    PageType = Card;
     ApplicationArea = Manufacturing;
-    UsageCategory = Lists;
+    UsageCategory = None;
     SourceTable = "Alternative Routing";
-    Caption = 'Alternative Routings';
-    //CardPageId = "Alternative Routing Card";
-    Editable = true;
+    Caption = 'Alternative Routing Card';
 
     layout
     {
         area(Content)
         {
-            repeater(GroupName)
+            group(General)
             {
+                Caption = 'General';
                 field("Item No."; Rec."Item No.")
                 {
                     ApplicationArea = Manufacturing;
                     ToolTip = 'Specifies the item number that this alternative routing is for.';
+                    Importance = Promoted;
 
                     trigger OnLookup(var Text: Text): Boolean
                     var
                         Item: Record Item;
                     begin
                         Item.SetRange("Manufacturing Policy", Item."Manufacturing Policy"::"Make-to-Stock");
-                        Item.SetFilter("Routing No.", '<>%1', '');  // Only items with routing
+                        Item.SetFilter("Routing No.", '<>%1', '');
                         if Page.RunModal(Page::"Item List", Item) = Action::LookupOK then
                             Rec.Validate("Item No.", Item."No.");
                     end;
                 }
 
+                field("Routing No."; Rec."Routing No.")
+                {
+                    ApplicationArea = Manufacturing;
+                    ToolTip = 'Specifies the alternative routing number.';
+                    Importance = Promoted;
+                }
+            }
+
+            group(Details)
+            {
+                Caption = 'Details';
                 field("Variant Code"; Rec."Variant Code")
                 {
                     ApplicationArea = Manufacturing;
@@ -53,12 +64,6 @@ page 50101 "Alternative Routing List"
                     ApplicationArea = Manufacturing;
                     ToolTip = 'Specifies the maximum order size for using this routing.';
                 }
-
-                field("Routing No."; Rec."Routing No.")
-                {
-                    ApplicationArea = Manufacturing;
-                    ToolTip = 'Specifies the alternative routing number.';
-                }
             }
         }
         area(FactBoxes)
@@ -68,13 +73,11 @@ page 50101 "Alternative Routing List"
                 ApplicationArea = Manufacturing;
                 SubPageLink = "No." = FIELD("Item No.");
             }
-            systempart(Links; Links)
+            part("Routing Lines"; "Routing Lines")
             {
-                ApplicationArea = RecordLinks;
-            }
-            systempart(Notes; Notes)
-            {
-                ApplicationArea = Notes;
+                ApplicationArea = Manufacturing;
+                SubPageLink = "Routing No." = FIELD("Routing No.");
+                UpdatePropagation = SubPart;
             }
         }
     }
@@ -100,24 +103,6 @@ page 50101 "Alternative Routing List"
                 RunObject = Page "Routing";
                 RunPageLink = "No." = FIELD("Routing No.");
                 ToolTip = 'View or edit the alternative routing.';
-            }
-        }
-        area(Processing)
-        {
-            action(CopyRouting)
-            {
-                ApplicationArea = Manufacturing;
-                Caption = 'Copy Routing';
-                Image = Copy;
-                ToolTip = 'Copy an existing alternative routing to create a new one.';
-
-                trigger OnAction()
-                var
-                    AltRouting: Record "Alternative Routing";
-                begin
-                    AltRouting.Copy(Rec);
-                    AltRouting.Insert(true);
-                end;
             }
         }
     }

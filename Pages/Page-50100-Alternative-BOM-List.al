@@ -1,11 +1,11 @@
-page 50101 "Alternative Routing List"
+page 50100 "Alternative Prod. BOM List"
 {
     PageType = List;
     ApplicationArea = Manufacturing;
     UsageCategory = Lists;
-    SourceTable = "Alternative Routing";
-    Caption = 'Alternative Routings';
-    //CardPageId = "Alternative Routing Card";
+    SourceTable = "Alternative Prod. BOM";
+    Caption = 'Alternative Production BOMs';
+    //CardPageId = "Alternative Prod. BOM Card";
     Editable = true;
 
     layout
@@ -17,14 +17,13 @@ page 50101 "Alternative Routing List"
                 field("Item No."; Rec."Item No.")
                 {
                     ApplicationArea = Manufacturing;
-                    ToolTip = 'Specifies the item number that this alternative routing is for.';
+                    ToolTip = 'Specifies the item number that this alternative BOM is for.';
 
                     trigger OnLookup(var Text: Text): Boolean
                     var
                         Item: Record Item;
                     begin
                         Item.SetRange("Manufacturing Policy", Item."Manufacturing Policy"::"Make-to-Stock");
-                        Item.SetFilter("Routing No.", '<>%1', '');  // Only items with routing
                         if Page.RunModal(Page::"Item List", Item) = Action::LookupOK then
                             Rec.Validate("Item No.", Item."No.");
                     end;
@@ -39,25 +38,25 @@ page 50101 "Alternative Routing List"
                 field("Location Code"; Rec."Location Code")
                 {
                     ApplicationArea = Manufacturing;
-                    ToolTip = 'Specifies the location where this routing will be used.';
+                    ToolTip = 'Specifies the location where this BOM will be used.';
                 }
 
                 field("Min Order Size"; Rec."Min Order Size")
                 {
                     ApplicationArea = Manufacturing;
-                    ToolTip = 'Specifies the minimum order size for using this routing.';
+                    ToolTip = 'Specifies the minimum order size for using this BOM.';
                 }
 
                 field("Max Order Size"; Rec."Max Order Size")
                 {
                     ApplicationArea = Manufacturing;
-                    ToolTip = 'Specifies the maximum order size for using this routing.';
+                    ToolTip = 'Specifies the maximum order size for using this BOM.';
                 }
 
-                field("Routing No."; Rec."Routing No.")
+                field("Production BOM No."; Rec."Production BOM No.")
                 {
                     ApplicationArea = Manufacturing;
-                    ToolTip = 'Specifies the alternative routing number.';
+                    ToolTip = 'Specifies the alternative production BOM number.';
                 }
             }
         }
@@ -92,31 +91,31 @@ page 50101 "Alternative Routing List"
                 RunPageLink = "No." = FIELD("Item No.");
                 ToolTip = 'View or edit detailed information about the item.';
             }
-            action(Routing)
+            action(ProductionBOM)
             {
                 ApplicationArea = Manufacturing;
-                Caption = 'Routing';
-                Image = Route;
-                RunObject = Page "Routing";
-                RunPageLink = "No." = FIELD("Routing No.");
-                ToolTip = 'View or edit the alternative routing.';
+                Caption = 'Production BOM';
+                Image = BOM;
+                RunObject = Page "Production BOM";
+                RunPageLink = "No." = FIELD("Production BOM No.");
+                ToolTip = 'View or edit the alternative production BOM.';
             }
         }
         area(Processing)
         {
-            action(CopyRouting)
+            action(CopyBOM)
             {
                 ApplicationArea = Manufacturing;
-                Caption = 'Copy Routing';
+                Caption = 'Copy BOM';
                 Image = Copy;
-                ToolTip = 'Copy an existing alternative routing to create a new one.';
+                ToolTip = 'Copy an existing alternative BOM to create a new one.';
 
                 trigger OnAction()
                 var
-                    AltRouting: Record "Alternative Routing";
+                    AltProdBOM: Record "Alternative Prod. BOM";
                 begin
-                    AltRouting.Copy(Rec);
-                    AltRouting.Insert(true);
+                    AltProdBOM.Copy(Rec);
+                    AltProdBOM.Insert(true);
                 end;
             }
         }

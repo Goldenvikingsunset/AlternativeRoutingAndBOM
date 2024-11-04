@@ -2,8 +2,6 @@ table 50101 "Alternative Routing"
 {
     Caption = 'Alternative Routing';
     DataClassification = CustomerContent;
-    //LookupPageId = "Alternative Routing List";
-    //DrillDownPageId = "Alternative Routing List";
 
     fields
     {
@@ -14,191 +12,198 @@ table 50101 "Alternative Routing"
             NotBlank = true;
 
             trigger OnValidate()
+            var
+                Item: Record Item;
             begin
-                if "Item No." <> xRec."Item No." then begin
-                    "Routing No." := '';
-                    "Variant Code" := '';
-                end;
+                if Item.Get("Item No.") then begin
+                    if Item."Manufacturing Policy" <> Item."Manufacturing Policy"::"Make-to-Stock" then
+                        Error(ItemMustBeMTSErr, "Item No.");
+
+                    if Item."Routing No." = '' then
+                        Error(ItemNoRoutingErr, "Item No.");
+                end else
+                    Error(ItemNotFoundErr, "Item No.");
             end;
         }
+
         field(2; "Variant Code"; Code[10])
         {
             Caption = 'Variant Code';
             TableRelation = "Item Variant".Code WHERE("Item No." = FIELD("Item No."));
 
             trigger OnValidate()
+            var
+                ItemVariant: Record "Item Variant";
             begin
-                TestField("Item No.");
+                if "Variant Code" <> '' then
+                    if not ItemVariant.Get("Item No.", "Variant Code") then
+                        Error(VariantNotFoundErr, "Variant Code", "Item No.");
             end;
         }
+
         field(3; "Location Code"; Code[10])
         {
             Caption = 'Location Code';
-            TableRelation = Location;
+            TableRelation = Location WHERE("Use As In-Transit" = CONST(false));
 
             trigger OnValidate()
+            var
+                Location: Record Location;
             begin
-                TestField("Item No.");
+                if "Location Code" <> '' then begin
+                    Location.Get("Location Code");
+                    if Location."Use As In-Transit" then
+                        Error(LocationInTransitErr, "Location Code");
+                end;
             end;
         }
+
         field(4; "Min Order Size"; Decimal)
         {
             Caption = 'Minimum Order Size';
-            DecimalPlaces = 0 : 5;
             MinValue = 0;
+            DecimalPlaces = 0 : 5;
 
             trigger OnValidate()
             begin
-                if "Min Order Size" > "Max Order Size" then
-                    Error(MinGreaterThanMaxErr);
+                if ("Min Order Size" < 0) then
+                    Error(MinOrderSizeErr);
+
+                if ("Max Order Size" <> 0) and ("Min Order Size" > "Max Order Size") then
+                    Error(OrderSizeRangeErr);
             end;
         }
+
         field(5; "Max Order Size"; Decimal)
         {
             Caption = 'Maximum Order Size';
-            DecimalPlaces = 0 : 5;
             MinValue = 0;
+            DecimalPlaces = 0 : 5;
 
             trigger OnValidate()
             begin
-                if "Min Order Size" > "Max Order Size" then
-                    Error(MinGreaterThanMaxErr);
+                if ("Max Order Size" < 0) then
+                    Error(MaxOrderSizeErr);
+
+                if ("Max Order Size" <> 0) and ("Min Order Size" > "Max Order Size") then
+                    Error(OrderSizeRangeErr);
             end;
         }
+
         field(6; "Routing No."; Code[20])
         {
             Caption = 'Routing No.';
-            TableRelation = "Routing Header"."No." WHERE(Status = CONST(Certified));
+            TableRelation = "Routing Header";
+            NotBlank = true;
 
             trigger OnValidate()
+            var
+                RoutingHeader: Record "Routing Header";
+                Item: Record Item;
             begin
-                TestField("Item No.");
-                if "Routing No." <> '' then
-                    ValidateRouting();
-            end;
-        }
-        field(7; "Starting Date"; Date)
-        {
-            Caption = 'Starting Date';
+                if "Routing No." <> '' then begin
+                    if not RoutingHeader.Get("Routing No.") then
+                        Error(RoutingNotFoundErr, "Routing No.");
 
-            trigger OnValidate()
-            begin
-                ValidateDateRange();
-            end;
-        }
-        field(8; "Ending Date"; Date)
-        {
-            Caption = 'Ending Date';
+                    // Validate routing status
+                    if RoutingHeader.Status <> RoutingHeader.Status::Certified then
+                        Error(RoutingNotCertifiedErr, "Routing No.");
 
-            trigger OnValidate()
-            begin
-                ValidateDateRange();
-            end;
-        }
-        field(9; Status; Enum "Alternative Status")
-        {
-            Caption = 'Status';
-            InitValue = New;
-        }
-        field(10; "Work Center Filter"; Code[20])
-        {
-            Caption = 'Work Center Filter';
-            TableRelation = "Work Center";
-
-            trigger OnValidate()
-            begin
-                if "Work Center Filter" <> '' then
-                    ValidateWorkCenter();
+                    // Check if routing matches item's manufacturing setup
+                    if Item.Get("Item No.") then begin
+                        if (Item."Routing No." <> '') and (Item."Routing No." = "Routing No.") then
+                            Error(RoutingIsDefaultErr, "Routing No.", "Item No.");
+                    end;
+                end;
             end;
         }
     }
 
     keys
     {
-        key(PK; "Item No.", "Variant Code", "Location Code", "Starting Date")
+        key(PK; "Item No.", "Variant Code", "Location Code", "Min Order Size")
         {
             Clustered = true;
         }
-        key(Key2; "Item No.", "Routing No.")
+        key(Routing; "Routing No.")
         {
-        }
-        key(Key3; "Routing No.")
-        {
-        }
-        key(Key4; "Work Center Filter")
-        {
+            // Secondary key for routing lookups
         }
     }
-
-    fieldgroups
-    {
-        fieldgroup(DropDown; "Item No.", "Variant Code", "Location Code", "Routing No.")
-        {
-        }
-    }
-
-    var
-        MinGreaterThanMaxErr: Label 'Minimum Order Size cannot be greater than Maximum Order Size.';
-        DateRangeErr: Label 'Starting Date must be before Ending Date.';
-        DuplicateErr: Label 'An alternative routing with overlapping dates already exists for this item, variant, and location.';
-        WorkCenterNotInRoutingErr: Label 'The selected Work Center must be used in the Routing operations.';
-        RoutingNotExistErr: Label 'Routing %1 does not exist.';
-        RoutingNotCertifiedErr: Label 'Routing %1 must be certified.';
-        StandardRoutingErr: Label 'This is already the standard Routing for the item.';
 
     trigger OnInsert()
     begin
-        TestField("Item No.");
-        TestField("Routing No.");
-        ValidateDuplicates();
+        ValidateData();
     end;
 
-    local procedure ValidateRouting()
+    trigger OnModify()
+    begin
+        ValidateData();
+    end;
+
     var
-        RoutingHeader: Record "Routing Header";
+        ItemMustBeMTSErr: Label 'Item %1 must be Make-to-Stock';
+        ItemNotFoundErr: Label 'Item %1 does not exist';
+        ItemNoRoutingErr: Label 'Item %1 must have a standard routing defined';
+        VariantNotFoundErr: Label 'Variant %1 does not exist for item %2';
+        LocationNotFoundErr: Label 'Location %1 does not exist';
+        LocationInTransitErr: Label 'Location %1 cannot be an in-transit location';
+        RoutingNotFoundErr: Label 'Routing %1 does not exist';
+        RoutingNotCertifiedErr: Label 'Routing %1 must be certified before it can be used';
+        RoutingIsDefaultErr: Label 'Routing %1 is already the default routing for item %2';
+        MinOrderSizeErr: Label 'Minimum Order Size cannot be negative';
+        MaxOrderSizeErr: Label 'Maximum Order Size cannot be negative';
+        OrderSizeRangeErr: Label 'Minimum Order Size must be less than Maximum Order Size';
+
+    local procedure ValidateData()
+    var
         Item: Record Item;
+        ItemVariant: Record "Item Variant";
+        Location: Record Location;
+        RoutingHeader: Record "Routing Header";
     begin
-        if not RoutingHeader.Get("Routing No.") then
-            Error(RoutingNotExistErr, "Routing No.");
+        // Validate Item
+        if not Item.Get("Item No.") then
+            Error(ItemNotFoundErr, "Item No.");
 
-        if RoutingHeader.Status <> RoutingHeader.Status::Certified then
-            Error(RoutingNotCertifiedErr, "Routing No.");
+        if Item."Manufacturing Policy" <> Item."Manufacturing Policy"::"Make-to-Stock" then
+            Error(ItemMustBeMTSErr, "Item No.");
 
-        if Item.Get("Item No.") then
-            if Item."Routing No." = "Routing No." then
-                Error(StandardRoutingErr);
-    end;
+        if Item."Routing No." = '' then
+            Error(ItemNoRoutingErr, "Item No.");
 
-    local procedure ValidateDateRange()
-    begin
-        if ("Starting Date" <> 0D) and ("Ending Date" <> 0D) then
-            if "Starting Date" > "Ending Date" then
-                Error(DateRangeErr);
-    end;
+        // Validate Variant if specified
+        if "Variant Code" <> '' then
+            if not ItemVariant.Get("Item No.", "Variant Code") then
+                Error(VariantNotFoundErr, "Variant Code", "Item No.");
 
-    local procedure ValidateDuplicates()
-    var
-        AltRouting: Record "Alternative Routing";
-    begin
-        AltRouting.SetRange("Item No.", "Item No.");
-        AltRouting.SetRange("Variant Code", "Variant Code");
-        AltRouting.SetRange("Location Code", "Location Code");
-        AltRouting.SetFilter("Starting Date", '<=%1', "Ending Date");
-        AltRouting.SetFilter("Ending Date", '>=%1', "Starting Date");
-        if not AltRouting.IsEmpty then
-            Error(DuplicateErr);
-    end;
+        // Validate Location if specified
+        if "Location Code" <> '' then begin
+            Location.Get("Location Code");
+            if Location."Use As In-Transit" then
+                Error(LocationInTransitErr, "Location Code");
+        end;
 
-    local procedure ValidateWorkCenter()
-    var
-        RoutingLine: Record "Routing Line";
-    begin
-        if "Routing No." = '' then
-            exit;
+        // Validate Routing
+        if "Routing No." <> '' then begin
+            if not RoutingHeader.Get("Routing No.") then
+                Error(RoutingNotFoundErr, "Routing No.");
 
-        RoutingLine.SetRange("Routing No.", "Routing No.");
-        RoutingLine.SetRange("Work Center No.", "Work Center Filter");
-        if RoutingLine.IsEmpty then
-            Error(WorkCenterNotInRoutingErr);
+            if RoutingHeader.Status <> RoutingHeader.Status::Certified then
+                Error(RoutingNotCertifiedErr, "Routing No.");
+
+            if (Item."Routing No." <> '') and (Item."Routing No." = "Routing No.") then
+                Error(RoutingIsDefaultErr, "Routing No.", "Item No.");
+        end;
+
+        // Validate Order Sizes
+        if ("Min Order Size" < 0) then
+            Error(MinOrderSizeErr);
+
+        if ("Max Order Size" < 0) then
+            Error(MaxOrderSizeErr);
+
+        if ("Max Order Size" <> 0) and ("Min Order Size" > "Max Order Size") then
+            Error(OrderSizeRangeErr);
     end;
 }
